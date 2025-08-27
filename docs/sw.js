@@ -1,5 +1,5 @@
-// sw.js — Oposicions (POU)
-const CACHE = "oposicions-pou-v1";
+// sw.js — Oposicions P.O.U (auto-update)
+const CACHE_NAME = "oposicions-pou-cache";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,27 +8,37 @@ const ASSETS = [
   "./icons/icon-512.png"
 ];
 
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
+// Instal·lació: guarda els fitxers al caché
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+  );
+  // Salta directament a la versió nova
+  self.skipWaiting();
 });
 
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => (k !== CACHE ? caches.delete(k) : null)))
+// Activació: elimina versions antigues del caché
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : null)))
     )
   );
+  self.clients.claim();
 });
 
-self.addEventListener("fetch", (e) => {
-  e.respondWith(
-    caches.match(e.request).then((cached) =>
-      cached ||
-      fetch(e.request).then((res) => {
+// Fetch: serveix del caché, però comprova si hi ha versió nova al servidor
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      const networkFetch = fetch(event.request).then((res) => {
+        // Actualitza el caché amb la resposta nova
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         return res;
-      }).catch(() => caches.match("./index.html"))
-    )
+      }).catch(() => cached);
+
+      return cached || networkFetch;
+    })
   );
 });
